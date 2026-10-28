@@ -91,6 +91,13 @@ def test_sucursales_suman_el_total(reporte):
     assert sum(f["Semana anterior"] for f in sucursales) == total["Semana anterior"]
 
 
+def test_tabla_por_sucursal_sin_columna_dias_con_ventas(reporte):
+    libro, _ = reporte
+    encabezados = [c.value for c in libro["Resumen"][10] if c.value is not None]
+    assert encabezados == ["Sucursal", "Semana actual", "Semana anterior", "Variación",
+                           "Unidades", "Promedio diario", "Producto estrella"]
+
+
 def test_resumen_tiene_cuatro_indicadores_y_no_ticket_promedio(reporte):
     libro, _ = reporte
     hoja = libro["Resumen"]

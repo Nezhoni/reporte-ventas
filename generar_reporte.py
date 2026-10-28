@@ -194,7 +194,7 @@ def escribir_indicadores(hoja, fila, resumen, ranking):
 
 
 def hoja_resumen(hoja, resumen, diarias, ranking, actual, anterior):
-    fijar_anchos(hoja, {"A": 22, "B": 17, "C": 17, "D": 13, "E": 13, "F": 12, "G": 17, "H": 20})
+    fijar_anchos(hoja, {"A": 22, "B": 17, "C": 17, "D": 13, "E": 13, "F": 17, "G": 20, "H": 17})
     subtitulo = f"Semana del {rango_semana(actual)}"
     if anterior is not None:
         subtitulo += f", comparada con la semana del {rango_semana(anterior)}"
@@ -206,11 +206,11 @@ def hoja_resumen(hoja, resumen, diarias, ranking, actual, anterior):
     fila_tabla = 10
     columnas = [
         ("Sucursal", None), ("Semana actual", FORMATO_PESOS), ("Semana anterior", FORMATO_PESOS),
-        ("Variación", FORMATO_VARIACION), ("Unidades", FORMATO_ENTERO), ("Días con ventas", "0"),
+        ("Variación", FORMATO_VARIACION), ("Unidades", FORMATO_ENTERO),
         ("Promedio diario", FORMATO_PESOS), ("Producto estrella", None),
     ]
     registros = resumen[["sucursal", "ventas", "ventas_anterior", "variacion", "unidades",
-                         "dias_con_ventas", "promedio_diario", "producto_estrella"]].values.tolist()
+                         "promedio_diario", "producto_estrella"]].values.tolist()
     ultima = escribir_tabla(hoja, fila_tabla, columnas, registros)
     for c in range(1, len(columnas) + 1):  # fila del total en negrita
         hoja.cell(ultima, c).font = Font(bold=True)
