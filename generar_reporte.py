@@ -265,7 +265,9 @@ def hoja_resumen(hoja, resumen, diarias, ranking, actual, anterior):
 def preparar_grafico(grafico, ancho_cm):
     grafico.width = ancho_cm
     grafico.height = ALTO_GRAFICO_CM
-    grafico.legend.position = "b"
+    # Leyenda arriba y fuera del área del gráfico: abajo tapaba los nombres del eje.
+    grafico.legend.position = "t"
+    grafico.legend.overlay = False
     # Sin esto, Excel puede ocultar los ejes de los gráficos creados con openpyxl.
     grafico.x_axis.delete = False
     grafico.y_axis.delete = False

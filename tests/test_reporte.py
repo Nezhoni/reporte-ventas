@@ -281,6 +281,14 @@ def test_graficos_debajo_de_la_tabla_sin_tapar_otras_tablas(reporte):
         assert fila_inicio + FILAS_GRAFICO <= fila_diarias  # y encima de la tabla diaria
 
 
+def test_leyendas_arriba_sin_tapar_los_nombres_del_eje(reporte):
+    # Abajo, la leyenda tapaba los nombres de las sucursales del gráfico de barras.
+    libro, _ = reporte
+    for grafico in libro["Resumen"]._charts:
+        assert grafico.legend.position == "t", grafico.tagname
+        assert not grafico.legend.overlay, grafico.tagname
+
+
 def test_grafico_de_lineas_no_suaviza(reporte):
     libro, _ = reporte
     lineas = [g for g in libro["Resumen"]._charts if g.tagname == "lineChart"]
