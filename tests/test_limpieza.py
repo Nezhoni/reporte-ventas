@@ -10,6 +10,8 @@ import pytest
 from openpyxl import Workbook
 
 from limpieza import (
+    ERROR,
+    FORMATO,
     Registro,
     buscar_encabezado,
     detectar_separador,
@@ -251,6 +253,7 @@ def test_total_a_mano_que_no_coincide_con_la_suma_limpia_se_registra():
         "problema": "fila de TOTAL escrita a mano ($91.000) que no coincide con la suma de las filas "
                     "limpias ($45.500); diferencia de $45.500",
         "accion": "eliminada; se usa la suma de las filas limpias",
+        "tipo": ERROR,  # un total que no cuadra es un error, no solo formato
     }]
 
 
@@ -288,6 +291,37 @@ def test_limpiar_tabla_convierte_y_registra_cada_correccion():
     assert "palabras" in correcciones_de(registro, 3)
     assert "tipeo" in correcciones_de(registro, 4)
     assert "desconocido" in correcciones_de(registro, 5)
+
+
+def test_cada_correccion_se_clasifica_como_error_o_conversion_de_formato():
+    df = tabla([
+        ["19/10/2026", "CHORRILLANA", "6", "$77.400"],     # fila 2: fecha, mayúsculas y $ → formato
+        [46314, "Chorri", "tres", 38700],                  # fila 3: fecha Excel → formato; abreviación y palabras → error
+        ["2026-10-19", "lomo saltao", 2, 21800],           # fila 4: tipeo → error
+        ["2026-10-19", "Promo almuerzo", 1, 6900],         # fila 5: desconocido → error
+    ])
+    registro = Registro()
+    limpiar_tabla(df, "x.csv", CATALOGO, registro)
+    tipo_de = {(c["fila"], c["problema"].split(":")[0]): c["tipo"] for c in registro.correcciones}
+    assert tipo_de == {
+        (2, "fecha en formato DD/MM/AAAA"): FORMATO,
+        (2, "nombre con mayúsculas, tildes o espacios distintos al catálogo"): FORMATO,
+        (2, "monto con '$' y punto de miles"): FORMATO,
+        (3, "fecha guardada como número de Excel"): FORMATO,
+        (3, "nombre abreviado"): ERROR,
+        (3, "cantidad escrita en palabras"): ERROR,
+        (4, "nombre con tipeo"): ERROR,
+        (5, "producto desconocido"): ERROR,
+    }
+
+
+def test_duplicado_es_error_y_filas_vacias_o_titulos_son_formato():
+    registro = Registro()
+    quitar_duplicados(ventas_repetidas(), "producto_dia", "p.csv", registro)
+    quitar_filas_basura(tabla([[None, None, None, None]]), "p.csv", registro)
+    assert [(c["problema"].split(" (")[0], c["tipo"]) for c in registro.correcciones] == [
+        ("fila duplicada", ERROR), ("fila vacía", FORMATO),
+    ]
 
 
 def test_fila_sin_nada_que_corregir_no_se_registra():
@@ -359,31 +393,33 @@ def test_formato_desconocido_da_error():
 
 # --- Registro de correcciones -------------------------------------------------
 
-def test_registro_guarda_archivo_fila_problema_y_accion():
+def test_registro_guarda_archivo_fila_problema_accion_y_tipo():
     registro = Registro()
-    registro.agregar("providencia.csv", 95, "fila TOTAL escrita a mano", "eliminada")
+    registro.agregar("providencia.csv", 51, "fila duplicada (igual a la fila 50)", "eliminada", ERROR)
     assert registro.correcciones == [{
         "archivo": "providencia.csv",
-        "fila": 95,
-        "problema": "fila TOTAL escrita a mano",
+        "fila": 51,
+        "problema": "fila duplicada (igual a la fila 50)",
         "accion": "eliminada",
+        "tipo": ERROR,
     }]
 
 
 def test_registro_actualiza_una_correccion_ya_anotada():
     registro = Registro()
-    registro.agregar("a.csv", 5, "fila de TOTAL escrita a mano", "eliminada")
-    registro.actualizar("a.csv", 5, "fila de TOTAL escrita a mano", "problema completo", "acción completa")
+    registro.agregar("a.csv", 5, "fila de TOTAL escrita a mano", "eliminada", FORMATO)
+    registro.actualizar("a.csv", 5, "fila de TOTAL escrita a mano", "problema completo", "acción completa", ERROR)
     assert registro.correcciones == [
-        {"archivo": "a.csv", "fila": 5, "problema": "problema completo", "accion": "acción completa"}
+        {"archivo": "a.csv", "fila": 5, "problema": "problema completo", "accion": "acción completa",
+         "tipo": ERROR}
     ]
 
 
 def test_registro_actualizar_agrega_si_no_habia_nada_anotado():
     registro = Registro()
-    registro.actualizar("a.csv", 5, "no existe", "problema nuevo", "acción nueva")
+    registro.actualizar("a.csv", 5, "no existe", "problema nuevo", "acción nueva", ERROR)
     assert registro.correcciones == [
-        {"archivo": "a.csv", "fila": 5, "problema": "problema nuevo", "accion": "acción nueva"}
+        {"archivo": "a.csv", "fila": 5, "problema": "problema nuevo", "accion": "acción nueva", "tipo": ERROR}
     ]
 
 
@@ -391,12 +427,13 @@ def test_registro_agrupa_correcciones_repetidas():
     registro = Registro()
     for fila in (15, 4, 9):
         registro.agregar("nunoa.xlsx", fila, "nombre con tipeo: 'Chorillana'",
-                         "unificado como 'Chorrillana'")
-    registro.agregar("nunoa.xlsx", 7, "fila vacía", "eliminada")
+                         "unificado como 'Chorrillana'", ERROR)
+    registro.agregar("nunoa.xlsx", 7, "fila vacía", "eliminada", FORMATO)
 
     grupos = registro.agrupado()
     assert len(grupos) == 2
     assert grupos[0] == {
+        "tipo": ERROR,
         "archivo": "nunoa.xlsx",
         "cantidad": 3,
         "filas": "4, 9, 15",
@@ -405,11 +442,30 @@ def test_registro_agrupa_correcciones_repetidas():
     }
 
 
+def test_registro_agrupado_muestra_primero_los_errores():
+    registro = Registro()
+    registro.agregar("a.csv", 2, "fecha en formato DD/MM/AAAA", "convertida a fecha", FORMATO)
+    registro.agregar("b.csv", 9, "fila duplicada (igual a la fila 8)", "eliminada", ERROR)
+    registro.agregar("a.csv", 5, "nombre abreviado: 'Chorri'", "abreviación expandida a 'Chorrillana'", ERROR)
+    assert [(g["tipo"], g["archivo"]) for g in registro.agrupado()] == [
+        (ERROR, "a.csv"), (ERROR, "b.csv"), (FORMATO, "a.csv"),
+    ]
+
+
+def test_registro_cuenta_errores_y_conversiones_por_separado():
+    registro = Registro()
+    registro.agregar("a.csv", 2, "fecha en formato DD/MM/AAAA", "convertida a fecha", FORMATO)
+    registro.agregar("a.csv", 3, "fecha en formato DD/MM/AAAA", "convertida a fecha", FORMATO)
+    registro.agregar("a.csv", 4, "nombre con tipeo: 'Chorillana'", "unificado como 'Chorrillana'", ERROR)
+    assert registro.cantidad(ERROR) == 1
+    assert registro.cantidad(FORMATO) == 2
+
+
 def test_registro_agrupado_resume_listas_largas_de_filas():
     registro = Registro()
     for fila in range(2, 92):
         registro.agregar("providencia.csv", fila, "monto con '$' y punto de miles",
-                         "convertido a número")
+                         "convertido a número", FORMATO)
     grupo = registro.agrupado()[0]
     assert grupo["cantidad"] == 90
     assert len(grupo["filas"]) < 60  # legible, no una lista de 90 números

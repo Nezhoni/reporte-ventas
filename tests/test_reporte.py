@@ -109,9 +109,44 @@ def test_datos_limpios_tiene_filtros_y_origen_de_cada_fila(reporte):
     assert all(d["Archivo de origen"] and d["Fila de origen"] > 1 for d in datos)
 
 
+def secciones_revision(hoja):
+    """{'Errores corregidos': fila del título, 'Conversiones de formato': fila del título}."""
+    return {
+        celda.value.split(" (")[0]: celda.row
+        for celda in hoja["A"]
+        if isinstance(celda.value, str) and celda.value.startswith(("Errores corregidos", "Conversiones de formato"))
+    }
+
+
+def test_revision_de_datos_separa_errores_de_conversiones(reporte):
+    libro, info = reporte
+    hoja = libro["Revisión de datos"]
+    secciones = secciones_revision(hoja)
+    assert secciones["Errores corregidos"] < secciones["Conversiones de formato"]  # primero los errores
+    errores = tabla(hoja, secciones["Errores corregidos"] + 1)
+    conversiones = tabla(hoja, secciones["Conversiones de formato"] + 1)
+
+    assert sum(f["N.º de filas"] for f in errores) == info["errores"]
+    assert sum(f["N.º de filas"] for f in conversiones) == info["conversiones"]
+    assert info["errores"] + info["conversiones"] == info["correcciones"]
+    assert hoja["A3"].value.startswith(
+        f"Errores reales corregidos: {info['errores']}. Conversiones de formato: {info['conversiones']}.")
+
+    texto_errores = " | ".join(f["Problema"] for f in errores)
+    for palabra in ["duplicada", "no coincide", "tipeo", "abreviado", "desconocido", "palabras"]:
+        assert palabra in texto_errores, palabra
+    for palabra in ["fecha", "'$'", "mayúsculas"]:
+        assert palabra not in texto_errores, palabra
+    texto_conversiones = " | ".join(f["Problema"] for f in conversiones)
+    for palabra in ["fecha en formato", "número de Excel", "'$'", "mayúsculas"]:
+        assert palabra in texto_conversiones, palabra
+
+
 def test_revision_de_datos_tiene_todas_las_correcciones_agrupadas(reporte):
     libro, info = reporte
-    filas = tabla(libro["Revisión de datos"], 6)
+    hoja = libro["Revisión de datos"]
+    secciones = secciones_revision(hoja)
+    filas = tabla(hoja, secciones["Errores corregidos"] + 1) + tabla(hoja, secciones["Conversiones de formato"] + 1)
     assert len(filas) == info["grupos"]
     assert sum(f["N.º de filas"] for f in filas) == info["correcciones"]
     duplicada = [f for f in filas if "duplicada" in f["Problema"]]

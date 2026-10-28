@@ -34,7 +34,7 @@ from calculos import (
     DIAS_URGENTE,
     TOTAL,
 )
-from limpieza import SUCURSALES, Registro, cargar_catalogo, cargar_ventas, pesos
+from limpieza import ERROR, FORMATO, SUCURSALES, Registro, cargar_catalogo, cargar_ventas, pesos
 
 HOJAS = ["Resumen", "Ranking de productos", "Reposición de insumos", "Revisión de datos", "Datos limpios"]
 TITULO = "Reporte semanal de ventas · Cocina del Valle"
@@ -386,20 +386,34 @@ def hoja_revision(hoja, registro):
     grupos = registro.agrupado()
     anchos = [26, 10, 32, 55, 42]
     fijar_anchos(hoja, dict(zip("ABCDE", anchos)))
+    errores, conversiones = registro.cantidad(ERROR), registro.cantidad(FORMATO)
     encabezado_hoja(
         hoja,
-        f"{len(registro.correcciones)} correcciones agrupadas en {len(grupos)} líneas. "
+        f"Errores reales corregidos: {errores}. Conversiones de formato: {conversiones}. "
         f"Ningún dato se cambió sin quedar registrado aquí.",
         5,
     )
-    hoja["A4"] = ("'Filas' indica dónde está cada caso en el archivo original "
-                  "(número de fila en Excel o de línea en el CSV).")
-    hoja["A4"].font = Font(italic=True, color=GRIS_TEXTO)
-    hoja.merge_cells("A4:E4")
+    hoja["A3"].font = Font(size=12, bold=True, color=AZUL_OSCURO)
+    explicacion = ("Errores: datos que estaban mal y se corrigieron (duplicados, totales que no cuadran, nombres "
+                   "mal escritos o abreviados, productos desconocidos, cantidades en palabras). Conversiones: datos "
+                   "correctos escritos en otro formato (fechas, montos con '$', mayúsculas, filas vacías o de "
+                   "título). 'Filas' indica dónde está cada caso en el archivo original (fila de Excel o línea del CSV).")
+    escribir_notas(hoja, 4, [explicacion], 5, sum(anchos))
+
     columnas = [("Archivo", None), ("N.º de filas", FORMATO_ENTERO), ("Filas", None), ("Problema", None), ("Acción", None)]
-    registros = [[g["archivo"], g["cantidad"], g["filas"], g["problema"], g["accion"]] for g in grupos]
-    escribir_tabla(hoja, 6, columnas, registros, ajustar_texto=True)
-    hoja.freeze_panes = "A7"
+    fila = 6
+    for titulo, tipo, cantidad in [("Errores corregidos", ERROR, errores),
+                                   ("Conversiones de formato", FORMATO, conversiones)]:
+        del_tipo = [g for g in grupos if g["tipo"] == tipo]
+        hoja.cell(fila, 1, f"{titulo} ({cantidad} correcciones en {len(del_tipo)} líneas)").font = Font(
+            size=12, bold=True, color=AZUL_OSCURO)
+        if del_tipo:
+            registros = [[g["archivo"], g["cantidad"], g["filas"], g["problema"], g["accion"]] for g in del_tipo]
+            ultima = escribir_tabla(hoja, fila + 1, columnas, registros, ajustar_texto=True)
+        else:
+            hoja.cell(fila + 1, 1, "Sin correcciones de este tipo.").font = Font(italic=True, color=GRIS_TEXTO)
+            ultima = fila + 1
+        fila = ultima + 2
 
 
 def hoja_datos_limpios(hoja, ventas):
@@ -456,6 +470,8 @@ def generar(carpeta=Path("datos_semana"), ruta_salida=Path("salida/reporte_seman
         "archivos": ventas["archivo"].nunique(),
         "filas": len(ventas),
         "correcciones": len(registro.correcciones),
+        "errores": registro.cantidad(ERROR),
+        "conversiones": registro.cantidad(FORMATO),
         "grupos": len(registro.agrupado()),
         "actual": actual,
         "anterior": anterior,
@@ -478,6 +494,8 @@ def main():
     print(f"Archivos de ventas leídos: {info['archivos']} (más inventario.xlsx)")
     print(f"Filas de ventas limpias:   {info['filas']}")
     print(f"Correcciones registradas:  {info['correcciones']} ({info['grupos']} líneas en 'Revisión de datos')")
+    print(f"  errores reales:          {info['errores']}")
+    print(f"  conversiones de formato: {info['conversiones']}")
     print(f"Semana del reporte:        {rango_semana(info['actual'])}")
     print(f"Ventas totales:            {pesos(info['ventas'])}{variacion_texto}")
     print(f"Insumos:                   {estados.get('URGENTE', 0)} URGENTE, {estados.get('Pedir', 0)} Pedir, "

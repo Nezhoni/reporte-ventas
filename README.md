@@ -55,7 +55,11 @@ También acepta `--datos` y `--salida` para usar otras rutas.
    (rojo) si alcanza para menos de 2 días, Pedir (amarillo) si alcanza para
    menos de 5, OK (verde) en otro caso. Arriba resume las alertas por sucursal.
 4. **Revisión de datos**: cada corrección hecha a los datos, con archivo, filas,
-   problema y acción. Las repetidas se agrupan ("91 filas: ...").
+   problema y acción, en dos grupos: primero los **errores corregidos**
+   (duplicados, totales que no cuadran, tipeos, abreviaciones, productos
+   desconocidos, cantidades en palabras) y después las **conversiones de
+   formato** (fechas, montos con `$`, mayúsculas, filas vacías o de título).
+   Arriba dice cuántos errores reales hubo. Las repetidas se agrupan ("91 filas: ...").
 5. **Datos limpios**: todas las ventas ya limpias, con filtros y el archivo y la
    fila de origen de cada una, para poder rastrear cualquier cifra.
 

@@ -55,46 +55,57 @@ SUCURSALES = {
 COLUMNAS_LIMPIAS = ["fecha", "producto", "categoria", "cantidad", "monto", "fila_origen"]
 PROBLEMA_TOTAL = "fila de TOTAL escrita a mano"
 
+# Tipo de cada corrección:
+#   ERROR: el dato estaba mal (duplicado, tipeo, total que no cuadra...) y se corrigió.
+#   FORMATO: el dato estaba bien pero escrito distinto (fechas, "$", mayúsculas, filas vacías...).
+ERROR = "Error corregido"
+FORMATO = "Conversión de formato"
+
 
 # --- Registro de correcciones -------------------------------------------------
 
 class Registro:
-    """Junta las correcciones hechas a los datos: archivo, fila, problema, acción."""
+    """Junta las correcciones hechas a los datos: archivo, fila, problema, acción y tipo."""
 
     def __init__(self):
         self.correcciones = []
 
-    def agregar(self, archivo, fila, problema, accion):
+    def agregar(self, archivo, fila, problema, accion, tipo):
         self.correcciones.append({
             "archivo": archivo,
             "fila": int(fila),
             "problema": problema,
             "accion": accion,
+            "tipo": tipo,
         })
 
-    def actualizar(self, archivo, fila, problema_anterior, problema, accion):
+    def actualizar(self, archivo, fila, problema_anterior, problema, accion, tipo):
         """Reemplaza una corrección ya anotada en esa fila por una más completa; si no existe, la agrega."""
         for c in self.correcciones:
             if c["archivo"] == archivo and c["fila"] == int(fila) and c["problema"] == problema_anterior:
-                c["problema"], c["accion"] = problema, accion
+                c["problema"], c["accion"], c["tipo"] = problema, accion, tipo
                 return
-        self.agregar(archivo, fila, problema, accion)
+        self.agregar(archivo, fila, problema, accion, tipo)
+
+    def cantidad(self, tipo):
+        return sum(1 for c in self.correcciones if c["tipo"] == tipo)
 
     def agrupado(self):
-        """Une las correcciones iguales del mismo archivo en una sola línea."""
+        """Une las correcciones iguales del mismo archivo en una sola línea; primero los errores."""
         grupos = {}
         for c in self.correcciones:
-            grupos.setdefault((c["archivo"], c["problema"], c["accion"]), []).append(c["fila"])
-        ordenados = sorted(grupos.items(), key=lambda g: (g[0][0], min(g[1])))
+            grupos.setdefault((c["tipo"], c["archivo"], c["problema"], c["accion"]), []).append(c["fila"])
+        ordenados = sorted(grupos.items(), key=lambda g: (g[0][0] != ERROR, g[0][1], min(g[1])))
         return [
             {
+                "tipo": tipo,
                 "archivo": archivo,
                 "cantidad": len(filas),
                 "filas": resumir_filas(filas),
                 "problema": problema,
                 "accion": accion,
             }
-            for (archivo, problema, accion), filas in ordenados
+            for (tipo, archivo, problema, accion), filas in ordenados
         ]
 
 
@@ -191,7 +202,7 @@ def leer_planilla(ruta, registro):
     i_encabezado = buscar_encabezado(filas)
     for i in range(i_encabezado):
         if any(not es_vacio(c) for c in filas[i]):
-            registro.agregar(ruta.name, i + 1, "fila de título sobre el encabezado", "omitida")
+            registro.agregar(ruta.name, i + 1, "fila de título sobre el encabezado", "omitida", FORMATO)
 
     encabezado = filas[i_encabezado]
     indices = [j for j, c in enumerate(encabezado) if not es_vacio(c)]
@@ -333,6 +344,7 @@ def verificar_totales_a_mano(totales, tabla_limpia, archivo, registro):
                 f"{PROBLEMA_TOTAL} ({pesos(monto)}) que no coincide con la suma de las filas limpias "
                 f"({pesos(suma)}); diferencia de {pesos(abs(monto - suma))}",
                 "eliminada; se usa la suma de las filas limpias",
+                ERROR,
             )
 
 
@@ -343,10 +355,12 @@ def quitar_filas_basura(tabla, archivo, registro):
     for _, fila in tabla.iterrows():
         valores = [fila[c] for c in columnas]
         if all(es_vacio(v) for v in valores):
-            registro.agregar(archivo, fila["fila_origen"], "fila vacía", "eliminada")
+            registro.agregar(archivo, fila["fila_origen"], "fila vacía", "eliminada", FORMATO)
             conservar.append(False)
         elif es_fila_total(valores):
-            registro.agregar(archivo, fila["fila_origen"], PROBLEMA_TOTAL, "eliminada (el total se recalcula)")
+            # Si después el total no cuadra, verificar_totales_a_mano lo cambia a ERROR.
+            registro.agregar(archivo, fila["fila_origen"], PROBLEMA_TOTAL,
+                             "eliminada (el total se recalcula)", FORMATO)
             conservar.append(False)
         else:
             conservar.append(True)
@@ -358,7 +372,7 @@ def leer_monto(fila, columna, archivo, registro):
     monto = leer_numero(valor)
     if monto is not None and isinstance(valor, str) and ("$" in valor or "." in valor):
         registro.agregar(archivo, fila["fila_origen"], "monto con '$' y punto de miles",
-                         "convertido a número")
+                         "convertido a número", FORMATO)
     return monto
 
 
@@ -373,36 +387,36 @@ def limpiar_tabla(tabla, archivo, catalogo, registro):
 
         fecha, formato = interpretar_fecha(fila.get("fecha"))
         if fecha is None:
-            registro.agregar(archivo, n, f"fecha ilegible: '{fila.get('fecha')}'", "fila descartada")
+            registro.agregar(archivo, n, f"fecha ilegible: '{fila.get('fecha')}'", "fila descartada", ERROR)
             continue
         if formato:
-            registro.agregar(archivo, n, formato, "convertida a fecha")
+            registro.agregar(archivo, n, formato, "convertida a fecha", FORMATO)
 
         valor_cantidad = fila.get("cantidad")
         cantidad = leer_numero(valor_cantidad)
         if cantidad is None or cantidad <= 0:
-            registro.agregar(archivo, n, f"cantidad ilegible: '{valor_cantidad}'", "fila descartada")
+            registro.agregar(archivo, n, f"cantidad ilegible: '{valor_cantidad}'", "fila descartada", ERROR)
             continue
         if isinstance(valor_cantidad, str) and normalizar_texto(valor_cantidad) in NUMEROS_EN_PALABRAS:
             registro.agregar(archivo, n, f"cantidad escrita en palabras: '{valor_cantidad.strip()}'",
-                             f"convertida a {cantidad}")
+                             f"convertida a {cantidad}", ERROR)
 
         escrito = fila.get("producto")
         if es_vacio(escrito):
-            registro.agregar(archivo, n, "fila sin producto", "fila descartada")
+            registro.agregar(archivo, n, "fila sin producto", "fila descartada", ERROR)
             continue
         producto, tipo = emparejar_producto(escrito, catalogo)
         if tipo == "formato":
             registro.agregar(archivo, n, "nombre con mayúsculas, tildes o espacios distintos al catálogo",
-                             "unificado con el nombre oficial")
+                             "unificado con el nombre oficial", FORMATO)
         elif tipo == "tipeo":
-            registro.agregar(archivo, n, f"nombre con tipeo: '{escrito}'", f"unificado como '{producto}'")
+            registro.agregar(archivo, n, f"nombre con tipeo: '{escrito}'", f"unificado como '{producto}'", ERROR)
         elif tipo == "abreviación":
             registro.agregar(archivo, n, f"nombre abreviado: '{escrito}'",
-                             f"abreviación expandida a '{producto}'")
+                             f"abreviación expandida a '{producto}'", ERROR)
         elif tipo == "desconocido":
             registro.agregar(archivo, n, f"producto desconocido: '{escrito}' (no está en el catálogo)",
-                             "se conserva con su nombre, sin categoría")
+                             "se conserva con su nombre, sin categoría", ERROR)
             producto = str(escrito).strip()
 
         if "total" in fila:
@@ -411,7 +425,7 @@ def limpiar_tabla(tabla, archivo, catalogo, registro):
             precio = leer_monto(fila, "precio", archivo, registro)
             monto = None if precio is None else cantidad * precio
         if monto is None:
-            registro.agregar(archivo, n, "monto ilegible", "fila descartada")
+            registro.agregar(archivo, n, "monto ilegible", "fila descartada", ERROR)
             continue
 
         if producto in catalogo:
@@ -420,7 +434,7 @@ def limpiar_tabla(tabla, archivo, catalogo, registro):
                 registro.agregar(
                     archivo, n,
                     f"monto no calza con el catálogo: planilla {pesos(monto)}, catálogo {pesos(esperado)}",
-                    "se respeta el monto de la planilla",
+                    "se respeta el monto de la planilla", ERROR,
                 )
             categoria = catalogo[producto]["categoria"]
         else:
@@ -452,7 +466,7 @@ def quitar_duplicados(tabla, formato, archivo, registro):
             primeras[llave] = fila["fila_origen"]
         else:
             registro.agregar(archivo, fila["fila_origen"],
-                             f"fila duplicada (igual a la fila {primeras[llave]})", "eliminada")
+                             f"fila duplicada (igual a la fila {primeras[llave]})", "eliminada", ERROR)
     return tabla[~repetidas].reset_index(drop=True)
 
 
@@ -481,7 +495,7 @@ def cargar_ventas(carpeta, catalogo, registro):
             continue
         clave = ruta.stem.split("_")[0].lower()
         if clave not in SUCURSALES:
-            registro.agregar(ruta.name, 0, "archivo de una sucursal desconocida", "ignorado completo")
+            registro.agregar(ruta.name, 0, "archivo de una sucursal desconocida", "ignorado completo", ERROR)
             continue
         sucursal, formato = SUCURSALES[clave]
 
