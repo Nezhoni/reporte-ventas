@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && salida=$(python3 -m pytest -q --tb=line 2>&1) || { echo \"$salida\" | tail -25 >&2; exit 2; }",
+            "timeout": 120,
+            "statusMessage": "Ejecutando tests..."
+          }
+        ]
+      }
+    ]
+  }
+}
