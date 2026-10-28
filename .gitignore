@@ -1,3 +1,14 @@
-__pycache__/
-.pytest_cache/
+# Reporte generado (se vuelve a crear con: python3 generar_reporte.py)
 salida/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Configuración personal de Claude Code (la del proyecto, .claude/settings.json, sí se sube)
+.claude/settings.local.json
+
+# Archivos temporales del sistema y de Excel
+.DS_Store
+~$*.xlsx
