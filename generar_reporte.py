@@ -29,6 +29,7 @@ from calculos import (
     variacion,
     ventas_diarias,
     DIAS_A_CUBRIR,
+    DIAS_MARGEN,
     DIAS_PEDIR,
     DIAS_URGENTE,
     TOTAL,
@@ -343,7 +344,8 @@ def hoja_reposicion(hoja, tabla, sin_receta, actual):
     notas = [
         f"Criterio: URGENTE si el stock alcanza para menos de {DIAS_URGENTE} días; Pedir si alcanza para menos "
         f"de {DIAS_PEDIR}; OK en otro caso.",
-        f"Cantidad sugerida = consumo de {DIAS_A_CUBRIR} días − stock actual, redondeada hacia arriba. "
+        f"Cantidad sugerida = consumo de {DIAS_A_CUBRIR + DIAS_MARGEN} días ({DIAS_A_CUBRIR} + {DIAS_MARGEN} "
+        f"de margen por si el pedido se demora) − stock actual, redondeada hacia arriba. "
         f"Solo se sugiere para URGENTE y Pedir.",
     ]
     for producto in sin_receta.itertuples():

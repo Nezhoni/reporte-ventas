@@ -160,12 +160,13 @@ def test_reposicion_calcula_consumo_cobertura_estado_y_sugerencia(ventas_insumos
     assert papas["consumo_diario"] == pytest.approx(2.5 / 7)
     assert papas["dias_cobertura"] == pytest.approx(0.5 / (2.5 / 7))  # 1,4 días
     assert papas["estado"] == "URGENTE"
-    assert papas["cantidad_sugerida"] == pytest.approx(2.0)          # 2,5 − 0,5
+    # 9 días (7 + 2 de margen): 2,5 / 7 × 9 = 3,21 kg − 0,5 = 2,71 → 2,8 kg
+    assert papas["cantidad_sugerida"] == pytest.approx(2.8)
 
     huevos = tabla.loc["Huevos"]  # 10 × 2 = 20 huevos; 12 alcanzan para 4,2 días
     assert huevos["consumo_semana"] == pytest.approx(20)
     assert huevos["estado"] == "Pedir"
-    assert huevos["cantidad_sugerida"] == 8                          # 20 − 12
+    assert huevos["cantidad_sugerida"] == 14                         # 20 / 7 × 9 = 25,7 − 12 = 13,7 → 14
 
 
 def test_insumo_ok_no_tiene_sugerencia_ni_negativa(ventas_insumos):

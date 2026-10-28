@@ -87,7 +87,8 @@ persona decida.
 **¿Cómo calcula qué pedir?** Con las recetas sabe cuánto de cada insumo lleva
 cada plato. Multiplica por lo vendido en la semana y obtiene el consumo
 diario. Si el stock alcanza para pocos días, avisa y sugiere pedir lo que falta
-para cubrir una semana completa (consumo de 7 días − stock actual).
+para cubrir una semana completa más 2 días de margen por si el pedido se demora
+(consumo de 9 días − stock actual).
 
 **¿Qué necesita de nosotros?** Que el catálogo y las recetas del inventario
 estén al día. Por ejemplo, "Promo almuerzo" se vende en Maipú pero no está en

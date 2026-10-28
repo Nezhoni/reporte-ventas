@@ -17,7 +17,8 @@ NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado",
 # Reposición: días que alcanza el stock con el consumo de la semana actual.
 DIAS_URGENTE = 2   # menos de 2 días: URGENTE
 DIAS_PEDIR = 5     # menos de 5 días: Pedir
-DIAS_A_CUBRIR = 7  # la sugerencia cubre el consumo de una semana
+DIAS_A_CUBRIR = 7  # la sugerencia cubre el consumo de una semana...
+DIAS_MARGEN = 2    # ...más 2 días de margen por si el pedido se demora
 ORDEN_ESTADOS = {"URGENTE": 0, "Pedir": 1, "Sin dato de stock": 2, "OK": 3}
 
 
@@ -160,8 +161,8 @@ def consumo_por_insumo(ventas, recetas, actual):
 def reposicion(ventas, recetas, stock, actual):
     """Qué insumos pedir según el consumo de la semana actual y el stock al cierre.
 
-    Cantidad sugerida = consumo de 7 días − stock actual, nunca negativa. Solo se
-    sugiere para URGENTE y Pedir; en OK queda vacía para no confundir.
+    Cantidad sugerida = consumo de 9 días (7 + 2 de margen) − stock actual, nunca
+    negativa. Solo se sugiere para URGENTE y Pedir; en OK queda vacía para no confundir.
     """
     consumo = consumo_por_insumo(ventas, recetas, actual)
     sin_stock = [i for i in consumo.index if i not in set(stock["insumo"])]
@@ -181,7 +182,7 @@ def reposicion(ventas, recetas, stock, actual):
         else:
             dias = fila.stock / consumo_diario
             estado = estado_stock(dias)
-            necesario = consumo_diario * DIAS_A_CUBRIR - fila.stock
+            necesario = consumo_diario * (DIAS_A_CUBRIR + DIAS_MARGEN) - fila.stock
             sugerida = None if estado == "OK" else redondear_hacia_arriba(max(0, necesario), fila.unidad)
         filas.append({
             "insumo": fila.insumo, "unidad": fila.unidad, "stock": fila.stock,
