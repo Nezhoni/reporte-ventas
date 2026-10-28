@@ -168,11 +168,21 @@ def test_reposicion_calcula_consumo_cobertura_estado_y_sugerencia(ventas_insumos
     assert huevos["cantidad_sugerida"] == 8                          # 20 − 12
 
 
-def test_sugerencia_nunca_es_negativa_con_stock_de_sobra(ventas_insumos):
+def test_insumo_ok_no_tiene_sugerencia_ni_negativa(ventas_insumos):
     limon = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL).set_index("insumo").loc["Limón"]
     assert limon["consumo_semana"] == pytest.approx(0.7)             # 14 × 0,05 kg
     assert limon["estado"] == "OK"
-    assert limon["cantidad_sugerida"] == 0                           # 0,7 − 10 sería −9,3
+    assert pd.isna(limon["cantidad_sugerida"])                       # 0,7 − 10 sería −9,3
+
+
+def test_insumo_ok_que_no_completa_7_dias_tampoco_tiene_sugerencia():
+    # 7 chorrillanas = 1,75 kg de papas; 1,5 kg alcanzan 6 días: OK, aunque falte para 7.
+    ventas = pd.DataFrame([venta(date(2026, 10, 20), "Providencia", "Chorrillana", 7, 90300)])
+    stock = pd.DataFrame([{"insumo": "Papas", "unidad": "kg", "stock": 1.5}])
+    papas = reposicion(ventas, RECETAS, stock, ACTUAL).set_index("insumo").loc["Papas"]
+    assert papas["dias_cobertura"] == pytest.approx(6)
+    assert papas["estado"] == "OK"
+    assert pd.isna(papas["cantidad_sugerida"])
 
 
 def test_insumo_sin_consumo_queda_ok_sin_cobertura(ventas_insumos):
@@ -180,7 +190,7 @@ def test_insumo_sin_consumo_queda_ok_sin_cobertura(ventas_insumos):
     assert aceite["consumo_semana"] == 0
     assert pd.isna(aceite["dias_cobertura"])
     assert aceite["estado"] == "OK"
-    assert aceite["cantidad_sugerida"] == 0
+    assert pd.isna(aceite["cantidad_sugerida"])
 
 
 def test_reposicion_ordena_urgentes_primero(ventas_insumos):

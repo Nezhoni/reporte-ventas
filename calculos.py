@@ -160,7 +160,8 @@ def consumo_por_insumo(ventas, recetas, actual):
 def reposicion(ventas, recetas, stock, actual):
     """Qué insumos pedir según el consumo de la semana actual y el stock al cierre.
 
-    Cantidad sugerida = consumo de 7 días − stock actual, nunca negativa.
+    Cantidad sugerida = consumo de 7 días − stock actual, nunca negativa. Solo se
+    sugiere para URGENTE y Pedir; en OK queda vacía para no confundir.
     """
     consumo = consumo_por_insumo(ventas, recetas, actual)
     sin_stock = [i for i in consumo.index if i not in set(stock["insumo"])]
@@ -176,12 +177,12 @@ def reposicion(ventas, recetas, stock, actual):
         if pd.isna(fila.stock):
             dias, estado, sugerida = None, "Sin dato de stock", None
         elif consumo_diario == 0:
-            dias, estado, sugerida = None, "OK", 0
+            dias, estado, sugerida = None, "OK", None
         else:
             dias = fila.stock / consumo_diario
             estado = estado_stock(dias)
             necesario = consumo_diario * DIAS_A_CUBRIR - fila.stock
-            sugerida = redondear_hacia_arriba(max(0, necesario), fila.unidad)
+            sugerida = None if estado == "OK" else redondear_hacia_arriba(max(0, necesario), fila.unidad)
         filas.append({
             "insumo": fila.insumo, "unidad": fila.unidad, "stock": fila.stock,
             "consumo_semana": consumo_semana, "consumo_diario": consumo_diario,
