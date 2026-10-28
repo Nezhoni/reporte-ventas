@@ -70,7 +70,7 @@ def test_providencia_registra_titulos_montos_mayusculas_y_total(resultado, seman
     assert len(correcciones(registro, archivo, "título")) == 2
     assert correcciones(registro, archivo, "$")
     assert correcciones(registro, archivo, "mayúsculas")
-    assert len(correcciones(registro, archivo, "total")) == 1
+    assert len(correcciones(registro, archivo, "fila de total")) == 1
 
 
 def test_providencia_registra_la_fila_duplicada_exacta(resultado):
@@ -80,6 +80,19 @@ def test_providencia_registra_la_fila_duplicada_exacta(resultado):
         (51, "fila duplicada (igual a la fila 50)")
     ]
     assert not correcciones(registro, "providencia_2026-10-12.csv", "duplicada")
+
+
+def test_providencia_avisa_que_su_total_a_mano_no_coincide(resultado):
+    # El TOTAL a mano de la semana actual incluye la fila duplicada de Sopaipillas (13 × $3.500).
+    _, registro = resultado
+    avisos = correcciones(registro, "providencia_2026-10-19.csv", "no coincide")
+    assert [(c["fila"], c["problema"]) for c in avisos] == [(
+        96,
+        "el TOTAL escrito a mano ($6.477.300) no coincide con la suma de las filas limpias "
+        "($6.431.800); diferencia de $45.500",
+    )]
+    # En la semana anterior no había duplicado y el total a mano sí coincide.
+    assert not correcciones(registro, "providencia_2026-10-12.csv", "no coincide")
 
 
 @pytest.mark.parametrize("semana", ["2026-10-12", "2026-10-19"])

@@ -21,6 +21,8 @@ from limpieza import (
     normalizar_columnas,
     quitar_duplicados,
     quitar_filas_basura,
+    totales_a_mano,
+    verificar_totales_a_mano,
 )
 
 CATALOGO = {
@@ -226,6 +228,36 @@ def test_elimina_filas_vacias_y_fila_total():
     assert sorted(c["fila"] for c in registro.correcciones) == [3, 4, 5]
     assert "vacía" in correcciones_de(registro, 3)
     assert "total" in correcciones_de(registro, 5)
+
+
+def test_total_a_mano_que_no_coincide_con_la_suma_limpia_se_registra():
+    original = tabla([
+        ["22/10/2026", "SOPAIPILLAS", "13", "$45.500"],
+        ["22/10/2026", "SOPAIPILLAS", "13", "$45.500"],   # copiada dos veces
+        ["", "TOTAL", "", "$91.000"],                      # sumado a mano, con el duplicado
+    ])
+    totales = totales_a_mano(original)
+    assert totales == [(4, 91000)]
+
+    limpia = tabla([[date(2026, 10, 22), "Sopaipillas", 13, 45500]],
+                   columnas=("fecha", "producto", "cantidad", "monto"))
+    registro = Registro()
+    verificar_totales_a_mano(totales, limpia, "providencia.csv", registro)
+    assert registro.correcciones == [{
+        "archivo": "providencia.csv",
+        "fila": 4,
+        "problema": "el TOTAL escrito a mano ($91.000) no coincide con la suma de las filas limpias "
+                    "($45.500); diferencia de $45.500",
+        "accion": "se usa la suma de las filas limpias",
+    }]
+
+
+def test_total_a_mano_que_coincide_no_agrega_correccion():
+    limpia = tabla([[date(2026, 10, 22), "Sopaipillas", 13, 45500]],
+                   columnas=("fecha", "producto", "cantidad", "monto"))
+    registro = Registro()
+    verificar_totales_a_mano([(3, 45500)], limpia, "providencia.csv", registro)
+    assert registro.correcciones == []
 
 
 # --- Conversión de cada fila --------------------------------------------------

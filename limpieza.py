@@ -295,6 +295,35 @@ def emparejar_producto(nombre, catalogo):
 
 # --- Limpieza de tablas -------------------------------------------------------
 
+def es_fila_total(valores):
+    return any(isinstance(v, str) and normalizar_texto(v).split()[:1] == ["total"] for v in valores)
+
+
+def totales_a_mano(tabla):
+    """[(fila, monto)] de las filas TOTAL escritas a mano, para compararlas después con la suma limpia."""
+    if "total" not in tabla.columns:
+        return []
+    columnas = [c for c in tabla.columns if c != "fila_origen"]
+    return [
+        (fila["fila_origen"], leer_numero(fila["total"]))
+        for _, fila in tabla.iterrows()
+        if es_fila_total([fila[c] for c in columnas])
+    ]
+
+
+def verificar_totales_a_mano(totales, tabla_limpia, archivo, registro):
+    """Avisa si un TOTAL escrito a mano no coincide con lo que suman las filas ya limpias."""
+    suma = int(tabla_limpia["monto"].sum())
+    for fila, monto in totales:
+        if monto is not None and monto != suma:
+            registro.agregar(
+                archivo, fila,
+                f"el TOTAL escrito a mano ({pesos(monto)}) no coincide con la suma de las filas limpias "
+                f"({pesos(suma)}); diferencia de {pesos(abs(monto - suma))}",
+                "se usa la suma de las filas limpias",
+            )
+
+
 def quitar_filas_basura(tabla, archivo, registro):
     """Elimina filas vacías y filas de TOTAL escritas a mano (el total se recalcula)."""
     columnas = [c for c in tabla.columns if c != "fila_origen"]
@@ -304,7 +333,7 @@ def quitar_filas_basura(tabla, archivo, registro):
         if all(es_vacio(v) for v in valores):
             registro.agregar(archivo, fila["fila_origen"], "fila vacía", "eliminada")
             conservar.append(False)
-        elif any(isinstance(v, str) and normalizar_texto(v).split()[:1] == ["total"] for v in valores):
+        elif es_fila_total(valores):
             registro.agregar(archivo, fila["fila_origen"], "fila de TOTAL escrita a mano",
                              "eliminada (el total se recalcula)")
             conservar.append(False)
@@ -446,9 +475,11 @@ def cargar_ventas(carpeta, catalogo, registro):
         sucursal, formato = SUCURSALES[clave]
 
         tabla = leer_planilla(ruta, registro)
+        totales = totales_a_mano(tabla)
         tabla = quitar_filas_basura(tabla, ruta.name, registro)
         tabla = limpiar_tabla(tabla, ruta.name, catalogo, registro)
         tabla = quitar_duplicados(tabla, formato, ruta.name, registro)
+        verificar_totales_a_mano(totales, tabla, ruta.name, registro)
         tabla["sucursal"] = sucursal
         tabla["archivo"] = ruta.name
         tablas.append(tabla)
