@@ -239,16 +239,18 @@ def test_total_a_mano_que_no_coincide_con_la_suma_limpia_se_registra():
     totales = totales_a_mano(original)
     assert totales == [(4, 91000)]
 
+    registro = Registro()
+    quitar_filas_basura(original, "providencia.csv", registro)  # anota "fila de TOTAL ... eliminada"
     limpia = tabla([[date(2026, 10, 22), "Sopaipillas", 13, 45500]],
                    columnas=("fecha", "producto", "cantidad", "monto"))
-    registro = Registro()
     verificar_totales_a_mano(totales, limpia, "providencia.csv", registro)
+    # Una sola línea para la fila 4: la eliminación y la diferencia juntas.
     assert registro.correcciones == [{
         "archivo": "providencia.csv",
         "fila": 4,
-        "problema": "el TOTAL escrito a mano ($91.000) no coincide con la suma de las filas limpias "
-                    "($45.500); diferencia de $45.500",
-        "accion": "se usa la suma de las filas limpias",
+        "problema": "fila de TOTAL escrita a mano ($91.000) que no coincide con la suma de las filas "
+                    "limpias ($45.500); diferencia de $45.500",
+        "accion": "eliminada; se usa la suma de las filas limpias",
     }]
 
 
@@ -366,6 +368,23 @@ def test_registro_guarda_archivo_fila_problema_y_accion():
         "problema": "fila TOTAL escrita a mano",
         "accion": "eliminada",
     }]
+
+
+def test_registro_actualiza_una_correccion_ya_anotada():
+    registro = Registro()
+    registro.agregar("a.csv", 5, "fila de TOTAL escrita a mano", "eliminada")
+    registro.actualizar("a.csv", 5, "fila de TOTAL escrita a mano", "problema completo", "acción completa")
+    assert registro.correcciones == [
+        {"archivo": "a.csv", "fila": 5, "problema": "problema completo", "accion": "acción completa"}
+    ]
+
+
+def test_registro_actualizar_agrega_si_no_habia_nada_anotado():
+    registro = Registro()
+    registro.actualizar("a.csv", 5, "no existe", "problema nuevo", "acción nueva")
+    assert registro.correcciones == [
+        {"archivo": "a.csv", "fila": 5, "problema": "problema nuevo", "accion": "acción nueva"}
+    ]
 
 
 def test_registro_agrupa_correcciones_repetidas():

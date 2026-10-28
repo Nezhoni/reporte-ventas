@@ -345,8 +345,8 @@ def hoja_reposicion(hoja, tabla, sin_receta, actual):
         f"Criterio: URGENTE si el stock alcanza para menos de {DIAS_URGENTE} días; Pedir si alcanza para menos "
         f"de {DIAS_PEDIR}; OK en otro caso.",
         f"Cantidad sugerida = consumo de {DIAS_A_CUBRIR + DIAS_MARGEN} días ({DIAS_A_CUBRIR} + {DIAS_MARGEN} "
-        f"de margen por si el pedido se demora) − stock actual, redondeada hacia arriba. "
-        f"Solo se sugiere para URGENTE y Pedir.",
+        f"de margen por si el pedido se demora) − stock actual, redondeada hacia arriba "
+        f"(a 0,1 en kg y litros; a número entero en unidades). Solo se sugiere para URGENTE y Pedir.",
     ]
     for producto in sin_receta.itertuples():
         notas.append(f"Atención: '{producto.producto}' ({producto.unidades} unidades vendidas) no descuenta "

@@ -86,11 +86,16 @@ def test_providencia_avisa_que_su_total_a_mano_no_coincide(resultado):
     # El TOTAL a mano de la semana actual incluye la fila duplicada de Sopaipillas (13 × $3.500).
     _, registro = resultado
     avisos = correcciones(registro, "providencia_2026-10-19.csv", "no coincide")
-    assert [(c["fila"], c["problema"]) for c in avisos] == [(
+    assert [(c["fila"], c["problema"], c["accion"]) for c in avisos] == [(
         96,
-        "el TOTAL escrito a mano ($6.477.300) no coincide con la suma de las filas limpias "
+        "fila de TOTAL escrita a mano ($6.477.300) que no coincide con la suma de las filas limpias "
         "($6.431.800); diferencia de $45.500",
+        "eliminada; se usa la suma de las filas limpias",
     )]
+    # Una sola línea para la fila 96, no una por la eliminación y otra por la diferencia.
+    fila_96 = [c for c in registro.correcciones
+               if c["archivo"] == "providencia_2026-10-19.csv" and c["fila"] == 96]
+    assert len(fila_96) == 1
     # En la semana anterior no había duplicado y el total a mano sí coincide.
     assert not correcciones(registro, "providencia_2026-10-12.csv", "no coincide")
 

@@ -53,6 +53,7 @@ SUCURSALES = {
     "maipu": ("Maipú", "pedido"),
 }
 COLUMNAS_LIMPIAS = ["fecha", "producto", "categoria", "cantidad", "monto", "fila_origen"]
+PROBLEMA_TOTAL = "fila de TOTAL escrita a mano"
 
 
 # --- Registro de correcciones -------------------------------------------------
@@ -70,6 +71,14 @@ class Registro:
             "problema": problema,
             "accion": accion,
         })
+
+    def actualizar(self, archivo, fila, problema_anterior, problema, accion):
+        """Reemplaza una corrección ya anotada en esa fila por una más completa; si no existe, la agrega."""
+        for c in self.correcciones:
+            if c["archivo"] == archivo and c["fila"] == int(fila) and c["problema"] == problema_anterior:
+                c["problema"], c["accion"] = problema, accion
+                return
+        self.agregar(archivo, fila, problema, accion)
 
     def agrupado(self):
         """Une las correcciones iguales del mismo archivo en una sola línea."""
@@ -312,15 +321,18 @@ def totales_a_mano(tabla):
 
 
 def verificar_totales_a_mano(totales, tabla_limpia, archivo, registro):
-    """Avisa si un TOTAL escrito a mano no coincide con lo que suman las filas ya limpias."""
+    """Avisa si un TOTAL escrito a mano no coincide con lo que suman las filas ya limpias.
+
+    Completa la corrección "fila de TOTAL ... eliminada" de esa fila, para que quede una sola línea.
+    """
     suma = int(tabla_limpia["monto"].sum())
     for fila, monto in totales:
         if monto is not None and monto != suma:
-            registro.agregar(
-                archivo, fila,
-                f"el TOTAL escrito a mano ({pesos(monto)}) no coincide con la suma de las filas limpias "
+            registro.actualizar(
+                archivo, fila, PROBLEMA_TOTAL,
+                f"{PROBLEMA_TOTAL} ({pesos(monto)}) que no coincide con la suma de las filas limpias "
                 f"({pesos(suma)}); diferencia de {pesos(abs(monto - suma))}",
-                "se usa la suma de las filas limpias",
+                "eliminada; se usa la suma de las filas limpias",
             )
 
 
@@ -334,8 +346,7 @@ def quitar_filas_basura(tabla, archivo, registro):
             registro.agregar(archivo, fila["fila_origen"], "fila vacía", "eliminada")
             conservar.append(False)
         elif es_fila_total(valores):
-            registro.agregar(archivo, fila["fila_origen"], "fila de TOTAL escrita a mano",
-                             "eliminada (el total se recalcula)")
+            registro.agregar(archivo, fila["fila_origen"], PROBLEMA_TOTAL, "eliminada (el total se recalcula)")
             conservar.append(False)
         else:
             conservar.append(True)
