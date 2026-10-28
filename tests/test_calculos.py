@@ -134,10 +134,12 @@ RECETAS = pd.DataFrame([
     {"producto": "Pisco sour", "insumo": "Limón", "cantidad": 0.05},
 ])
 STOCK = pd.DataFrame([
-    {"insumo": "Papas", "unidad": "kg", "stock": 0.5},
-    {"insumo": "Huevos", "unidad": "unidad", "stock": 12},
-    {"insumo": "Limón", "unidad": "kg", "stock": 10},
-    {"insumo": "Aceite", "unidad": "litro", "stock": 3},
+    {"sucursal": "Providencia", "insumo": "Papas", "unidad": "kg", "stock": 0.5},
+    {"sucursal": "Providencia", "insumo": "Huevos", "unidad": "unidad", "stock": 12},
+    {"sucursal": "Providencia", "insumo": "Aceite", "unidad": "litro", "stock": 3},
+    {"sucursal": "Maipú", "insumo": "Papas", "unidad": "kg", "stock": 0.5},
+    {"sucursal": "Maipú", "insumo": "Huevos", "unidad": "unidad", "stock": 40},
+    {"sucursal": "Ñuñoa", "insumo": "Limón", "unidad": "kg", "stock": 10},
 ])
 
 
@@ -146,16 +148,21 @@ def ventas_insumos():
     return pd.DataFrame([
         venta(date(2026, 10, 14), "Providencia", "Chorrillana", 7, 90300),   # semana anterior: no cuenta
         venta(date(2026, 10, 20), "Providencia", "Chorrillana", 6, 77400),
-        venta(date(2026, 10, 22), "Maipú", "Chorrillana", 4, 51600),          # 10 chorrillanas en la semana
+        venta(date(2026, 10, 22), "Providencia", "Chorrillana", 4, 51600),   # Providencia: 10 en la semana
+        venta(date(2026, 10, 22), "Maipú", "Chorrillana", 4, 51600),         # Maipú: 4 en la semana
         venta(date(2026, 10, 23), "Ñuñoa", "Pisco sour", 14, 68600, "Bebidas"),
         venta(date(2026, 10, 23), "Maipú", "Promo almuerzo", 5, 34500, "Sin categoría"),
     ])
 
 
-def test_reposicion_calcula_consumo_cobertura_estado_y_sugerencia(ventas_insumos):
-    tabla = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL).set_index("insumo")
+def fila(tabla, sucursal, insumo):
+    return tabla.set_index(["sucursal", "insumo"]).loc[(sucursal, insumo)]
 
-    papas = tabla.loc["Papas"]  # 10 chorrillanas × 0,25 kg = 2,5 kg
+
+def test_reposicion_calcula_consumo_cobertura_estado_y_sugerencia(ventas_insumos):
+    tabla = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL)
+
+    papas = fila(tabla, "Providencia", "Papas")  # 10 chorrillanas × 0,25 kg = 2,5 kg
     assert papas["consumo_semana"] == pytest.approx(2.5)
     assert papas["consumo_diario"] == pytest.approx(2.5 / 7)
     assert papas["dias_cobertura"] == pytest.approx(0.5 / (2.5 / 7))  # 1,4 días
@@ -163,14 +170,29 @@ def test_reposicion_calcula_consumo_cobertura_estado_y_sugerencia(ventas_insumos
     # 9 días (7 + 2 de margen): 2,5 / 7 × 9 = 3,21 kg − 0,5 = 2,71 → 2,8 kg
     assert papas["cantidad_sugerida"] == pytest.approx(2.8)
 
-    huevos = tabla.loc["Huevos"]  # 10 × 2 = 20 huevos; 12 alcanzan para 4,2 días
+    huevos = fila(tabla, "Providencia", "Huevos")  # 10 × 2 = 20 huevos; 12 alcanzan para 4,2 días
     assert huevos["consumo_semana"] == pytest.approx(20)
     assert huevos["estado"] == "Pedir"
     assert huevos["cantidad_sugerida"] == 14                         # 20 / 7 × 9 = 25,7 − 12 = 13,7 → 14
 
 
+def test_cada_sucursal_usa_su_consumo_y_su_stock(ventas_insumos):
+    # Mismo stock de papas (0,5 kg), distinto consumo: Providencia URGENTE, Maipú solo Pedir.
+    tabla = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL)
+    papas_maipu = fila(tabla, "Maipú", "Papas")                       # 4 × 0,25 = 1 kg
+    assert papas_maipu["consumo_semana"] == pytest.approx(1.0)
+    assert papas_maipu["dias_cobertura"] == pytest.approx(3.5)       # 0,5 / (1 / 7)
+    assert papas_maipu["estado"] == "Pedir"
+    assert papas_maipu["cantidad_sugerida"] == pytest.approx(0.8)     # 1 / 7 × 9 = 1,29 − 0,5 = 0,79 → 0,8
+    assert fila(tabla, "Providencia", "Papas")["estado"] == "URGENTE"
+
+    huevos_maipu = fila(tabla, "Maipú", "Huevos")                     # 4 × 2 = 8 huevos; 40 alcanzan 35 días
+    assert huevos_maipu["consumo_semana"] == pytest.approx(8)
+    assert huevos_maipu["estado"] == "OK"
+
+
 def test_insumo_ok_no_tiene_sugerencia_ni_negativa(ventas_insumos):
-    limon = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL).set_index("insumo").loc["Limón"]
+    limon = fila(reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL), "Ñuñoa", "Limón")
     assert limon["consumo_semana"] == pytest.approx(0.7)             # 14 × 0,05 kg
     assert limon["estado"] == "OK"
     assert pd.isna(limon["cantidad_sugerida"])                       # 0,7 − 10 sería −9,3
@@ -179,31 +201,38 @@ def test_insumo_ok_no_tiene_sugerencia_ni_negativa(ventas_insumos):
 def test_insumo_ok_que_no_completa_7_dias_tampoco_tiene_sugerencia():
     # 7 chorrillanas = 1,75 kg de papas; 1,5 kg alcanzan 6 días: OK, aunque falte para 7.
     ventas = pd.DataFrame([venta(date(2026, 10, 20), "Providencia", "Chorrillana", 7, 90300)])
-    stock = pd.DataFrame([{"insumo": "Papas", "unidad": "kg", "stock": 1.5}])
-    papas = reposicion(ventas, RECETAS, stock, ACTUAL).set_index("insumo").loc["Papas"]
+    stock = pd.DataFrame([{"sucursal": "Providencia", "insumo": "Papas", "unidad": "kg", "stock": 1.5}])
+    papas = fila(reposicion(ventas, RECETAS, stock, ACTUAL), "Providencia", "Papas")
     assert papas["dias_cobertura"] == pytest.approx(6)
     assert papas["estado"] == "OK"
     assert pd.isna(papas["cantidad_sugerida"])
 
 
 def test_insumo_sin_consumo_queda_ok_sin_cobertura(ventas_insumos):
-    aceite = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL).set_index("insumo").loc["Aceite"]
+    aceite = fila(reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL), "Providencia", "Aceite")
     assert aceite["consumo_semana"] == 0
     assert pd.isna(aceite["dias_cobertura"])
     assert aceite["estado"] == "OK"
     assert pd.isna(aceite["cantidad_sugerida"])
 
 
-def test_reposicion_ordena_urgentes_primero(ventas_insumos):
+def test_reposicion_ordena_urgentes_primero_y_luego_por_dias(ventas_insumos):
     tabla = reposicion(ventas_insumos, RECETAS, STOCK, ACTUAL)
-    assert list(tabla["estado"]) == ["URGENTE", "Pedir", "OK", "OK"]
+    assert list(zip(tabla["estado"], tabla["sucursal"], tabla["insumo"])) == [
+        ("URGENTE", "Providencia", "Papas"),   # 1,4 días
+        ("Pedir", "Maipú", "Papas"),           # 3,5 días
+        ("Pedir", "Providencia", "Huevos"),    # 4,2 días
+        ("OK", "Maipú", "Huevos"),             # 35 días
+        ("OK", "Ñuñoa", "Limón"),              # 100 días
+        ("OK", "Providencia", "Aceite"),       # sin consumo
+    ]
 
 
 def test_insumo_de_receta_sin_stock_registrado_se_marca(ventas_insumos):
     recetas = pd.concat([RECETAS, pd.DataFrame([{"producto": "Pisco sour", "insumo": "Hielo", "cantidad": 0.1}])])
-    tabla = reposicion(ventas_insumos, recetas, STOCK, ACTUAL).set_index("insumo")
-    assert tabla.loc["Hielo", "estado"] == "Sin dato de stock"
-    assert tabla.loc["Hielo", "consumo_semana"] == pytest.approx(1.4)
+    hielo = fila(reposicion(ventas_insumos, recetas, STOCK, ACTUAL), "Ñuñoa", "Hielo")
+    assert hielo["estado"] == "Sin dato de stock"
+    assert hielo["consumo_semana"] == pytest.approx(1.4)              # 14 × 0,1
 
 
 def test_productos_vendidos_sin_receta(ventas_insumos):

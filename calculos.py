@@ -23,11 +23,12 @@ ORDEN_ESTADOS = {"URGENTE": 0, "Pedir": 1, "Sin dato de stock": 2, "OK": 3}
 
 
 def cargar_inventario(ruta):
-    """Recetas (producto, insumo, cantidad) y stock (insumo, unidad, stock) del inventario."""
+    """Recetas (producto, insumo, cantidad) y stock por sucursal (sucursal, insumo, unidad, stock)."""
     recetas = pd.read_excel(ruta, sheet_name="Recetas").rename(
         columns={"Producto": "producto", "Insumo": "insumo", "Cantidad por unidad": "cantidad"})
     stock = pd.read_excel(ruta, sheet_name="Stock").rename(
-        columns={"Insumo": "insumo", "Unidad": "unidad", "Stock al cierre del domingo": "stock"})
+        columns={"Sucursal": "sucursal", "Insumo": "insumo", "Unidad": "unidad",
+                 "Stock al cierre del domingo": "stock"})
     return recetas, stock
 
 
@@ -151,29 +152,31 @@ def redondear_hacia_arriba(valor, unidad):
 
 
 def consumo_por_insumo(ventas, recetas, actual):
-    """Σ (unidades vendidas × cantidad de la receta) en la semana actual, por insumo."""
-    vendidas = de_semana(ventas, actual).groupby("producto", as_index=False)["cantidad"].sum()
+    """Σ (unidades vendidas × cantidad de la receta) en la semana actual, por sucursal e insumo."""
+    vendidas = de_semana(ventas, actual).groupby(["sucursal", "producto"], as_index=False)["cantidad"].sum()
     uso = vendidas.merge(recetas.rename(columns={"cantidad": "por_unidad"}), on="producto")
     uso["consumo"] = uso["cantidad"] * uso["por_unidad"]
-    return uso.groupby("insumo")["consumo"].sum()
+    return uso.groupby(["sucursal", "insumo"])["consumo"].sum()
 
 
 def reposicion(ventas, recetas, stock, actual):
-    """Qué insumos pedir según el consumo de la semana actual y el stock al cierre.
+    """Qué insumos pedir en cada sucursal, según su consumo de la semana actual y su stock al cierre.
 
     Cantidad sugerida = consumo de 9 días (7 + 2 de margen) − stock actual, nunca
     negativa. Solo se sugiere para URGENTE y Pedir; en OK queda vacía para no confundir.
     """
     consumo = consumo_por_insumo(ventas, recetas, actual)
-    sin_stock = [i for i in consumo.index if i not in set(stock["insumo"])]
+    con_stock = set(zip(stock["sucursal"], stock["insumo"]))
+    sin_stock = [clave for clave in consumo.index if clave not in con_stock]
     tabla = pd.concat([
-        stock[["insumo", "unidad", "stock"]],
-        pd.DataFrame({"insumo": sin_stock, "unidad": "", "stock": float("nan")}),
+        stock[["sucursal", "insumo", "unidad", "stock"]],
+        pd.DataFrame({"sucursal": [s for s, _ in sin_stock], "insumo": [i for _, i in sin_stock],
+                      "unidad": "", "stock": float("nan")}),
     ], ignore_index=True)
 
     filas = []
     for fila in tabla.itertuples():
-        consumo_semana = float(consumo.get(fila.insumo, 0))
+        consumo_semana = float(consumo.get((fila.sucursal, fila.insumo), 0))
         consumo_diario = consumo_semana / 7
         if pd.isna(fila.stock):
             dias, estado, sugerida = None, "Sin dato de stock", None
@@ -185,14 +188,14 @@ def reposicion(ventas, recetas, stock, actual):
             necesario = consumo_diario * (DIAS_A_CUBRIR + DIAS_MARGEN) - fila.stock
             sugerida = None if estado == "OK" else redondear_hacia_arriba(max(0, necesario), fila.unidad)
         filas.append({
-            "insumo": fila.insumo, "unidad": fila.unidad, "stock": fila.stock,
+            "sucursal": fila.sucursal, "insumo": fila.insumo, "unidad": fila.unidad, "stock": fila.stock,
             "consumo_semana": consumo_semana, "consumo_diario": consumo_diario,
             "dias_cobertura": dias, "estado": estado, "cantidad_sugerida": sugerida,
         })
 
     resultado = pd.DataFrame(filas)
     resultado["_orden"] = resultado["estado"].map(ORDEN_ESTADOS)
-    return (resultado.sort_values(["_orden", "dias_cobertura"], na_position="last")
+    return (resultado.sort_values(["_orden", "dias_cobertura", "sucursal", "insumo"], na_position="last")
             .drop(columns="_orden").reset_index(drop=True))
 
 

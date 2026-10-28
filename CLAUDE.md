@@ -7,6 +7,7 @@ Proyecto de portafolio. Una cadena ficticia de restaurantes ("Cocina del Valle",
 - Todo en español: código, comentarios, mensajes y el Excel final.
 - Python 3 con pandas y openpyxl. No agregues otras librerías sin preguntarme.
 - Nunca modifiques los archivos de `datos_semana/`. Son la entrada original.
+  Única excepción: si cambia el formato del inventario de ejemplo, `crear_datos_ejemplo.py` puede regenerar `datos_semana/inventario.xlsx` (generándolo aparte y comprobando antes que las planillas de ventas no cambian).
 - Toda corrección a los datos se registra (archivo, fila, problema, acción). Nada se cambia en silencio.
 - Los datos son de ejemplo y deben decirlo en el reporte y en el README.
 

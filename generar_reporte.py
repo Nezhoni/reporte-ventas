@@ -34,7 +34,7 @@ from calculos import (
     DIAS_URGENTE,
     TOTAL,
 )
-from limpieza import Registro, cargar_catalogo, cargar_ventas, pesos
+from limpieza import SUCURSALES, Registro, cargar_catalogo, cargar_ventas, pesos
 
 HOJAS = ["Resumen", "Ranking de productos", "Reposición de insumos", "Revisión de datos", "Datos limpios"]
 TITULO = "Reporte semanal de ventas · Cocina del Valle"
@@ -308,37 +308,55 @@ def hoja_ranking(hoja, ranking, actual, anterior):
     hoja.freeze_panes = hoja.cell(fila_encabezado + 1, 1)
 
 
+def resumen_alertas(tabla):
+    """'Providencia: 1 URGENTE, 1 Pedir · Ñuñoa: sin alertas · ...' en el orden de las sucursales."""
+    nombres = [nombre for nombre, _ in SUCURSALES.values()]
+    presentes = set(tabla["sucursal"])
+    partes = []
+    for sucursal in [n for n in nombres if n in presentes] + sorted(presentes - set(nombres)):
+        estados = tabla[tabla["sucursal"] == sucursal]["estado"].value_counts()
+        alertas = [f"{estados[e]} {e}" for e in ("URGENTE", "Pedir", "Sin dato de stock") if e in estados]
+        partes.append(f"{sucursal}: {', '.join(alertas) if alertas else 'sin alertas'}")
+    return "Alertas por sucursal: " + " · ".join(partes)
+
+
 def hoja_reposicion(hoja, tabla, sin_receta, actual):
-    anchos = [18, 9, 12, 13, 11, 11, 18, 15]
-    fijar_anchos(hoja, dict(zip("ABCDEFGH", anchos)))
-    encabezado_hoja(hoja, f"Según el consumo de la semana del {rango_semana(actual)} y el stock al cierre del domingo", 8)
+    anchos = [13, 18, 9, 12, 13, 11, 11, 18, 15]
+    fijar_anchos(hoja, dict(zip("ABCDEFGHI", anchos)))
+    encabezado_hoja(hoja, f"Cada sucursal con su propio stock, según su consumo de la semana del "
+                          f"{rango_semana(actual)} y su stock al cierre del domingo", 9)
+    hoja["A4"] = resumen_alertas(tabla)
+    hoja["A4"].font = Font(bold=True, color=AZUL_OSCURO)
+    hoja.merge_cells("A4:I4")
     columnas = [
-        ("Insumo", None), ("Unidad", None), ("Stock al cierre", None), ("Consumo de la semana", None),
-        ("Consumo diario", None), ("Días que alcanza", "0.0"), ("Estado", None), ("Cantidad sugerida a pedir", None),
+        ("Sucursal", None), ("Insumo", None), ("Unidad", None), ("Stock al cierre", None),
+        ("Consumo de la semana", None), ("Consumo diario", None), ("Días que alcanza", "0.0"),
+        ("Estado", None), ("Cantidad sugerida a pedir", None),
     ]
     registros = []
     for fila in tabla.itertuples():
         registros.append([
-            fila.insumo, fila.unidad, fila.stock, fila.consumo_semana, fila.consumo_diario,
+            fila.sucursal, fila.insumo, fila.unidad, fila.stock, fila.consumo_semana, fila.consumo_diario,
             SIN_DATO if vacio(fila.dias_cobertura) else fila.dias_cobertura,
             fila.estado,
             SIN_DATO if vacio(fila.cantidad_sugerida) else fila.cantidad_sugerida,
         ])
-    fila_encabezado = 5
+    fila_encabezado = 6
     ultima = escribir_tabla(hoja, fila_encabezado, columnas, registros)
 
     for i, fila in enumerate(tabla.itertuples()):
         f = fila_encabezado + 1 + i
         formato = FORMATO_ENTERO if fila.unidad == "unidad" else FORMATO_DECIMAL
-        for c in (3, 4, 5, 8):
+        for c in (4, 5, 6, 9):
             hoja.cell(f, c).number_format = formato
-        for c in (6, 8):
+        for c in (7, 9):
             hoja.cell(f, c).alignment = Alignment(horizontal="right")
         fondo, texto = COLORES_ESTADO[fila.estado]
-        estado = hoja.cell(f, 7)
+        estado = hoja.cell(f, 8)
         estado.fill = relleno(fondo)
         estado.font = Font(bold=True, color=texto)
         estado.alignment = Alignment(horizontal="center")
+    hoja.auto_filter.ref = f"A{fila_encabezado}:I{ultima}"
     hoja.freeze_panes = hoja.cell(fila_encabezado + 1, 1)
 
     notas = [
@@ -351,7 +369,7 @@ def hoja_reposicion(hoja, tabla, sin_receta, actual):
     for producto in sin_receta.itertuples():
         notas.append(f"Atención: '{producto.producto}' ({producto.unidades} unidades vendidas) no descuenta "
                      f"insumos porque no tiene receta en el inventario.")
-    escribir_notas(hoja, ultima + 2, notas, 8, sum(anchos))
+    escribir_notas(hoja, ultima + 2, notas, 9, sum(anchos))
 
 
 def escribir_notas(hoja, fila, notas, ultima_columna, ancho_total):

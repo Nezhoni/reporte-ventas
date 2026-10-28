@@ -144,17 +144,35 @@ def test_variacion_verde_si_sube_y_roja_si_baja(reporte):
 def test_reposicion_colorea_estados_y_solo_sugiere_si_hay_que_pedir(reporte):
     libro, _ = reporte
     hoja = libro["Reposición de insumos"]
-    filas = tabla(hoja, 5)
+    filas = tabla(hoja, 6)
     estados = [f["Estado"] for f in filas]
-    assert estados.count("URGENTE") == 2 and estados.count("Pedir") == 3 and estados.count("OK") == 13
+    # 18 insumos × 3 sucursales = 54 filas; pocas alertas en toda la cadena.
+    assert estados.count("URGENTE") == 2 and estados.count("Pedir") == 3 and estados.count("OK") == 49
 
     colores = {"URGENTE": "FFC7CE", "Pedir": "FFEB9C", "OK": "C6EFCE"}
     for i, f in enumerate(filas):
-        assert hoja.cell(6 + i, 7).fill.fgColor.rgb.endswith(colores[f["Estado"]])
+        assert hoja.cell(7 + i, 8).fill.fgColor.rgb.endswith(colores[f["Estado"]])
         if f["Estado"] == "OK":
             assert f["Cantidad sugerida a pedir"] == SIN_DATO
         else:
             assert f["Cantidad sugerida a pedir"] > 0
+
+
+def test_reposicion_es_por_sucursal(reporte):
+    libro, _ = reporte
+    hoja = libro["Reposición de insumos"]
+    filas = tabla(hoja, 6)
+    por_sucursal = {s: sum(1 for f in filas if f["Sucursal"] == s) for s in ("Providencia", "Ñuñoa", "Maipú")}
+    assert por_sucursal == {"Providencia": 18, "Ñuñoa": 18, "Maipú": 18}
+
+    alertas = [(f["Estado"], f["Sucursal"], f["Insumo"]) for f in filas if f["Estado"] != "OK"]
+    assert alertas == [
+        ("URGENTE", "Providencia", "Palta"), ("URGENTE", "Maipú", "Limón"),
+        ("Pedir", "Providencia", "Huevos"), ("Pedir", "Ñuñoa", "Carne de vacuno"), ("Pedir", "Maipú", "Pan"),
+    ]
+    assert hoja["A4"].value == ("Alertas por sucursal: Providencia: 1 URGENTE, 1 Pedir · "
+                                "Ñuñoa: 1 Pedir · Maipú: 1 URGENTE, 1 Pedir")
+    assert hoja.auto_filter.ref == "A6:I60"
 
 
 def test_reposicion_avisa_productos_sin_receta(reporte):

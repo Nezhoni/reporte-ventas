@@ -50,9 +50,10 @@ También acepta `--datos` y `--salida` para usar otras rutas.
    de ventas diarias.
 2. **Ranking de productos**: ordenados por ventas, con su % del total y cuántos
    puestos subieron o bajaron respecto de la semana anterior.
-3. **Reposición de insumos**: cuántos días alcanza cada insumo y cuánto pedir.
-   URGENTE (rojo) si alcanza para menos de 2 días, Pedir (amarillo) si alcanza
-   para menos de 5, OK (verde) en otro caso.
+3. **Reposición de insumos**: cada sucursal tiene su propio stock. Para cada
+   sucursal e insumo muestra cuántos días alcanza y cuánto pedir: URGENTE
+   (rojo) si alcanza para menos de 2 días, Pedir (amarillo) si alcanza para
+   menos de 5, OK (verde) en otro caso. Arriba resume las alertas por sucursal.
 4. **Revisión de datos**: cada corrección hecha a los datos, con archivo, filas,
    problema y acción. Las repetidas se agrupan ("91 filas: ...").
 5. **Datos limpios**: todas las ventas ya limpias, con filtros y el archivo y la
@@ -85,8 +86,9 @@ puede ser de pino o de queso), **no adivina**: la deja marcada para que una
 persona decida.
 
 **¿Cómo calcula qué pedir?** Con las recetas sabe cuánto de cada insumo lleva
-cada plato. Multiplica por lo vendido en la semana y obtiene el consumo
-diario. Si el stock alcanza para pocos días, avisa y sugiere pedir lo que falta
+cada plato. Multiplica por lo que vendió cada sucursal en la semana y obtiene
+su consumo diario, que compara con el stock de esa misma sucursal. Si el stock
+alcanza para pocos días, avisa y sugiere pedir lo que falta
 para cubrir una semana completa más 2 días de margen por si el pedido se demora
 (consumo de 9 días − stock actual). La cantidad se redondea hacia arriba (a 0,1
 en kilos y litros, a número entero en unidades), porque es mejor pedir un poco

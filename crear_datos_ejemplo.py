@@ -82,14 +82,24 @@ RECETAS = {
     "Pisco sour": {"Pisco": 0.06, "Limón": 0.05, "Huevos": 0.2},
 }
 
-# Días que alcanza el stock de cada insumo con el consumo de la semana actual.
-# Calibrado para que haya pocas alertas: 2 urgentes (< 2 días), 3 por pedir (< 5 días).
+# Cada sucursal tiene su propio stock. Días que alcanza el stock de cada insumo
+# con el consumo de esa sucursal en la semana actual. Por defecto alcanza de sobra
+# (6 días o más, más un poco según la sucursal)...
 DIAS_COBERTURA = {
-    "Palta": 1.3, "Limón": 1.6,                      # URGENTE
-    "Carne de vacuno": 3.4, "Huevos": 2.7, "Pan": 4.1,  # Pedir
-    "Papas": 6.5, "Cebolla": 9, "Choclo": 7.5, "Pollo": 10, "Arroz": 14,
-    "Tomate": 6, "Harina": 8, "Queso": 11, "Aceite": 12, "Vienesas": 7,
-    "Bebidas en lata": 9, "Fruta": 6.5, "Pisco": 13,
+    "Papas": 6.5, "Carne de vacuno": 8, "Cebolla": 9, "Huevos": 7.5, "Choclo": 7.5,
+    "Pollo": 10, "Arroz": 14, "Tomate": 6, "Harina": 8, "Queso": 11, "Aceite": 12,
+    "Pan": 8, "Vienesas": 7, "Palta": 7, "Bebidas en lata": 9, "Fruta": 6.5,
+    "Pisco": 13, "Limón": 7,
+}
+DIAS_EXTRA_SUCURSAL = {"Providencia": 0, "Ñuñoa": 0.5, "Maipú": 1}
+# ...salvo estas pocas combinaciones, que generan las alertas del ejemplo:
+# 2 urgentes (< 2 días) y 3 por pedir (< 5 días) en toda la cadena.
+ALERTAS_STOCK = {
+    ("Providencia", "Palta"): 1.3,          # URGENTE
+    ("Maipú", "Limón"): 1.6,                # URGENTE
+    ("Providencia", "Huevos"): 3.2,         # Pedir
+    ("Ñuñoa", "Carne de vacuno"): 3.6,      # Pedir
+    ("Maipú", "Pan"): 4.1,                  # Pedir
 }
 
 # Cómo anota los platos el personal de Ñuñoa: (nombre escrito, probabilidad).
@@ -133,18 +143,24 @@ def generar_ventas_reales(semilla=SEMILLA):
 
 
 def calcular_stock(ventas):
-    """Stock al cierre del domingo, calibrado con DIAS_COBERTURA."""
+    """Stock de cada sucursal al cierre del domingo: (sucursal, insumo, unidad, stock).
+
+    Calibrado con el consumo de esa sucursal, DIAS_COBERTURA y ALERTAS_STOCK.
+    """
     inicio_actual = INICIO_SEMANAS[-1]
-    consumo = {insumo: 0.0 for insumo in UNIDADES}
+    consumo = {(s, i): 0.0 for s in FACTOR_SUCURSAL for i in UNIDADES}
     for venta in ventas:
         if venta["fecha"] >= inicio_actual:
             for insumo, por_unidad in RECETAS[venta["producto"]].items():
-                consumo[insumo] += venta["cantidad"] * por_unidad
+                consumo[(venta["sucursal"], insumo)] += venta["cantidad"] * por_unidad
     filas = []
-    for insumo, unidad in UNIDADES.items():
-        stock = consumo[insumo] / 7 * DIAS_COBERTURA[insumo]
-        stock = round(stock) if unidad == "unidad" else round(stock, 1)
-        filas.append((insumo, unidad, stock))
+    for sucursal in FACTOR_SUCURSAL:
+        for insumo, unidad in UNIDADES.items():
+            dias = ALERTAS_STOCK.get(
+                (sucursal, insumo), DIAS_COBERTURA[insumo] + DIAS_EXTRA_SUCURSAL[sucursal])
+            stock = consumo[(sucursal, insumo)] / 7 * dias
+            stock = round(stock) if unidad == "unidad" else round(stock, 1)
+            filas.append((sucursal, insumo, unidad, stock))
     return filas
 
 
@@ -301,7 +317,7 @@ def escribir_inventario(ventas, ruta):
             hoja.append([producto, insumo, cantidad])
 
     hoja = libro.create_sheet("Stock")
-    hoja.append(["Insumo", "Unidad", "Stock al cierre del domingo"])
+    hoja.append(["Sucursal", "Insumo", "Unidad", "Stock al cierre del domingo"])
     for fila in calcular_stock(ventas):
         hoja.append(list(fila))
 
@@ -325,7 +341,7 @@ def crear_datos(carpeta):
             azar = random.Random(f"{SEMILLA}-{nombre}")
             resumen.append((nombre, escribir(ventas, inicio, carpeta / nombre, azar)))
     escribir_inventario(ventas, carpeta / "inventario.xlsx")
-    resumen.append(("inventario.xlsx", ["hojas Catálogo, Recetas y Stock"]))
+    resumen.append(("inventario.xlsx", ["hojas Catálogo, Recetas y Stock (stock por sucursal)"]))
     return resumen
 
 
